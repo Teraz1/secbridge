@@ -39,7 +39,7 @@ Every kit follows the same 3-step pattern:
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/secbridge.git
+git clone https://github.com/Teraz1/secbridge.git
 cd secbridge/integrations/sangfor-ngaf-to-sentinelone
 
 # 2. Run the installer (prompts for your API key)
