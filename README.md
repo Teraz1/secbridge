@@ -1,264 +1,421 @@
-# 🔌 SecBridge — Community Security Integration Kits
+# ⬡ SecBridge
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/YOUR_USERNAME/secbridge/validate-kit.yml?label=kit%20validation)](../../actions)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Integrations](https://img.shields.io/badge/integrations-1-blue.svg)](#-available-integrations)
+[![Version](https://img.shields.io/badge/version-3.2-blue.svg)](#)
 
-> **"If the vendor won't build the integration, the community will."**
+> **Bridge the gap between your security devices and your SIEM — no paid middleware, no consultants.**
 
-SecBridge is an open-source collection of **drop-in integration kits** for security products that don't natively talk to each other. Each kit is a self-contained, production-ready package that any engineer can deploy on a single Linux VM in minutes — no paid middleware, no consultants, no waiting for a vendor roadmap.
-
----
-
-## 🎯 The Problem We Solve
-
-Many organizations run mixed-vendor security stacks — an EDR from one vendor, a firewall from another, a SIEM from a third. Vendors build native integrations only for their biggest partners. Everyone else is left with:
-
-- Incomplete documentation
-- Custom scripts that break on updates
-- Expensive professional services
-- Forum threads that go unanswered
-
-SecBridge fixes this — one integration at a time, built and verified by the community.
+SecBridge is an open-source syslog collection and routing platform. It receives logs from any security device (firewalls, IDS, VPN), parses them into structured JSON, and ships them to your SIEM or XDR platform — all from a single Linux VM.
 
 ---
 
-## 📦 Available Integrations
+## What SecBridge Does
 
-| # | Source Product | Destination | Protocol | Status |
-|---|---------------|-------------|----------|--------|
-| 001 | [Sangfor NGAF (Firewall)](integrations/sangfor-ngaf-to-sentinelone/) | SentinelOne Singularity SDL | Syslog UDP/TCP | ✅ Stable |
-| — | *Your integration here* | *...* | *...* | [Contribute!](CONTRIBUTING.md) |
+```
+Sangfor NGAF  ──── UDP:514  ──┐
+Fortinet FGT  ──── UDP:5140 ──┤
+Cisco ASA     ──── TCP:5141 ──┤──► SecBridge VM ──► SentinelOne SDL
+Palo Alto     ──── UDP:5142 ──┤                └──► Cisco XDR
+[Any device]  ──── UDP:xxxx ──┘
+```
+
+Each device sends syslog to SecBridge on its own dedicated port. SecBridge parses the raw syslog into structured JSON fields and ships to your chosen destination(s).
 
 ---
 
-## 🚀 Quick Start
+## Supported Destinations
 
-Every kit follows the same 3-step pattern:
+| Destination | Status | Notes |
+|---|---|---|
+| SentinelOne SDL | ✅ Stable | Via scalyr-agent-2 |
+| Cisco XDR | ✅ Stable | Via CTIM Findings API |
+| Both simultaneously | ✅ Supported | Run both shippers together |
 
-```bash
-# 1. Clone the repo
-git clone https://github.com/Teraz1/secbridge.git
-cd secbridge/integrations/sangfor-ngaf-to-sentinelone
+---
 
-# 2. Run the installer (prompts for your API key)
-sudo bash scripts/install.sh
+## Repository Structure
 
-# 3. Deploy the log parser as a background service
-sudo bash scripts/deploy-parser.sh
+```
+secbridge/
+│
+├── web/                        ← Web UI (React + FastAPI)
+│   ├── App.jsx                 ← Full React frontend
+│   ├── backend.py              ← FastAPI REST API
+│   ├── install.sh              ← Web UI installer
+│   ├── main.jsx
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   └── requirements.txt
+│
+├── cisco_xdr_shipper.py        ← Cisco XDR shipping agent
+├── cisco_xdr.json              ← Cisco XDR credentials config
+├── deploy-cisco-xdr.sh         ← Cisco XDR deploy script
+├── secbridge-cisco-xdr.service ← Cisco XDR systemd service
+│
+├── sangfor_parser.py           ← Sangfor NGAF log parser
+├── sangfor-ngaf-parser.json    ← Sangfor parser field config
+├── sources.json                ← All sources configuration
+│
+├── install.sh                  ← Main installer
+├── manage-sources.sh           ← CLI source management
+├── deploy-parser.sh            ← Parser service deployer
+├── test-syslog.sh              ← Send test logs
+│
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.md
 ```
 
 ---
 
-## 🖥️ Web UI (Optional)
+## Quick Start
 
-SecBridge includes an optional web dashboard to manage sources, view the pipeline status, and configure destinations — all without touching the terminal.
+### 1. Clone the repo
 
 ```bash
-cd secbridge/web
+git clone https://github.com/Teraz1/secbridge.git
+cd secbridge
+```
+
+### 2. Install the Web UI
+
+```bash
+cd web
 sudo bash install.sh
 ```
 
-Opens at `http://YOUR_VM_IP:3000`
-Default login: **admin / admin**
+Opens at `http://YOUR_VM_IP:3000` — Default login: **admin / admin**
 
-### What the Web UI includes
+### 3. Run the Setup Wizard
+
+Open the web UI → click **Setup Wizard** → follow the 4 steps:
+1. Enter your SentinelOne SDL API key and ingest URL
+2. Add your first source (name, port, protocol)
+3. Verify connection
+4. Done
+
+### 4. Point your device at SecBridge
+
+Configure your firewall/device to send syslog to:
+- **IP:** Your SecBridge VM IP
+- **Port:** The port you configured (default 514)
+- **Protocol:** UDP or TCP
+
+---
+
+## Web UI
+
+The web dashboard manages everything without touching the terminal.
+
+### Pages
 
 | Page | What it does |
-|------|-------------|
-| **Dashboard** | Live log throughput, source health, recent events |
-| **Pipeline Map** | Visual end-to-end flow — see exactly where issues are |
-| **Sources** | Add / remove / enable / disable syslog sources |
-| **Parsers** | Manage vendor parser files |
-| **Destinations** | Configure SentinelOne SDL API key and URL |
-| **Settings** | Restart agent, view config file paths |
+|---|---|
+| **Dashboard** | Live log throughput, agent status, recent events |
+| **Sources** | Add / remove / toggle syslog sources. Apply config to activate ports |
+| **Live Logs** | Real-time syslog stream per source |
+| **Health Check** | Service status, port checks, SDL reachability |
+| **Pipeline Map** | Visual end-to-end flow from device to SIEM |
+| **Parsers** | Upload and manage vendor parser files |
+| **Destination** | Configure SentinelOne SDL API key and ingest URL |
+| **Users** | Role-based access (admin / analyst / viewer) |
+| **Backup** | Download and restore full configuration |
+| **Setup Wizard** | First-time guided setup |
 
-### Pipeline Map
+### Important — Apply Config
 
-The Pipeline Map shows your full log flow in one view:
+After adding or removing a source in the UI, you **must click Apply Config**. This runs `manage-sources.sh apply` which:
+- Rewrites `/etc/scalyr-agent-2/agent.json` with all active sources
+- Opens the required syslog ports
+- Restarts scalyr-agent-2
 
-```
-Sources → SecBridge → Parsers → Log Files → SentinelOne SDL
-```
+Without clicking Apply, new sources are saved to `sources.json` but the agent does not start listening.
 
-Each source gets its own row across all stages. Color coded:
-- 🟢 Green = healthy and receiving logs
-- 🟡 Yellow = active but has parse errors
-- ⭕ Grey = inactive / no logs received
+### Service
 
-### Web UI folder structure
-
-```
-web/
-├── install.sh          ← one command — installs everything
-├── backend.py          ← FastAPI REST API (port 8000)
-├── requirements.txt    ← Python deps
-├── README.md           ← web-specific docs
-└── frontend/
-    ├── index.html
-    ├── package.json
-    ├── vite.config.js
-    └── src/
-        ├── App.jsx     ← full React UI
-        └── main.jsx
-```
-
-### Web UI API endpoints
-
-| Method | Endpoint | What it does |
-|--------|----------|-------------|
-| POST | `/api/login` | Authenticate |
-| GET | `/api/sources` | List all sources |
-| POST | `/api/sources` | Add new source |
-| DELETE | `/api/sources/{id}` | Remove source |
-| PATCH | `/api/sources/{id}/toggle` | Enable / disable |
-| POST | `/api/apply` | Apply config changes |
-| GET | `/api/status` | Agent status + log sizes |
-| GET | `/api/logs/{product}` | Tail a log file |
-| GET | `/api/destination` | Read SDL credentials |
-| POST | `/api/destination` | Save SDL credentials |
-| POST | `/api/restart` | Restart Scalyr Agent |
-
-> See [web/README.md](web/README.md) for full web UI documentation.
-
----
-
-## ⚙️ Managing Multiple Sources (CLI)
-
-SecBridge supports multiple firewall/security devices forwarding to the **same Linux collector VM** — each on its own port, with its own log file and firewall rules.
-
-All sources are managed from a single config file: `config/sources.json`
-
-### Add a New Source
+The web UI runs as a single systemd service — backend (FastAPI) and frontend (React) are served together on port 3000:
 
 ```bash
-# Interactive wizard
-bash scripts/manage-sources.sh add
-
-# Apply changes → opens ports + regenerates agent.json
-sudo bash scripts/manage-sources.sh apply
+systemctl status secbridge
+journalctl -u secbridge -f
 ```
 
-### List All Sources
+---
+
+## Managing Sources (CLI)
+
+Sources are also manageable from the terminal via `manage-sources.sh`.
 
 ```bash
-bash scripts/manage-sources.sh list
+# Add a source interactively
+sudo bash manage-sources.sh add
+
+# List all configured sources
+bash manage-sources.sh list
+
+# Apply changes — regenerates agent.json and opens ports
+sudo bash manage-sources.sh apply
+
+# Check status — port listening + recent logs
+bash manage-sources.sh status
+
+# Remove a source by ID
+sudo bash manage-sources.sh remove 002
 ```
 
-```
-── Configured Sources ──
+### sources.json
 
-  ID   STATUS   NAME                PORT   PROTO  ALLOWED IPS
-  ---  -------  ------------------  -----  -----  -----------
-  001  enabled  Sangfor NGAF        514    udp    any
-  002  enabled  Fortinet FortiGate  5140   udp    192.168.10.1
-  003  enabled  Cisco ASA           5141   tcp    10.0.0.1
+All sources are defined in `sources.json`. Example:
+
+```json
+{
+  "secbridge": {
+    "destination": {
+      "type": "sentinelone_sdl",
+      "ingest_url": "https://xdr.us1.sentinelone.net",
+      "api_key": "YOUR_API_KEY"
+    },
+    "sources": [
+      {
+        "id": "001",
+        "enabled": true,
+        "name": "Sangfor NGAF",
+        "product": "sangfor-ngaf",
+        "syslog_port": 514,
+        "protocol": "udp",
+        "allowed_ips": [],
+        "log_file": "sangfor-ngaf.log",
+        "parsed_log_file": "sangfor-ngaf-parsed.log",
+        "parser_script": "/opt/secbridge/sangfor_parser.py",
+        "parser_name": "sangfor-ngaf"
+      }
+    ]
+  }
+}
 ```
 
-### Other Commands
+**Key fields:**
+
+| Field | Description |
+|---|---|
+| `syslog_port` | Must be unique per source |
+| `allowed_ips` | Restrict syslog to specific device IPs (empty = allow all) |
+| `parsed_log_file` | If set, parser outputs structured JSON here |
+| `parser_script` | Path to the Python parser for this source |
+
+---
+
+## Log Parsing
+
+### How it works
+
+```
+Device syslog ──► sangfor-ngaf.log (raw)
+                        │
+                sangfor_parser.py (systemd service)
+                        │
+                sangfor-ngaf-parsed.log (structured JSON)
+                        │
+                scalyr-agent-2 ships both files to SDL
+```
+
+### Deploy the Sangfor parser
 
 ```bash
-bash scripts/manage-sources.sh status          # live port check + log tail
-sudo bash scripts/manage-sources.sh remove 002 # disable a source
+sudo bash deploy-parser.sh
 ```
 
-### How Multiple Sources Work
+### Test the parser
 
-```
-Sangfor NGAF ──── UDP:514  ──┐
-Fortinet FGT ──── UDP:5140 ──┤  Linux Collector VM
-Cisco ASA    ──── TCP:5141 ──┘  (manage-sources.sh apply)
-                                 ├── agent.json (auto-regenerated)
-                                 ├── firewall rules (auto-applied)
-                                 └── per-source log files
-                                        │ HTTPS
-                                        ▼
-                              SentinelOne SDL
-                              (parse fields in SDL console)
+```bash
+python3 sangfor_parser.py --test
 ```
 
-Each source gets:
-- Its own syslog port (must be unique)
-- Its own log file `/var/log/scalyr-agent-2/<product>.log`
-- Optional IP allowlist (restrict syslog to specific device IPs)
+### Parser output example
 
----
-
-## 📁 Kit Structure
-
-Every integration kit follows this layout:
-
-```
-integrations/<source>-to-<destination>/
-├── scripts/
-│   ├── install.sh          ← one-command installer (Ubuntu + Rocky Linux)
-│   ├── deploy-parser.sh    ← deploys parser as systemd service
-│   └── test-syslog.sh      ← sends test logs to verify pipeline
-├── config/
-│   └── <product>-parser.json
-├── parser/
-│   └── <product>_parser.py ← log format → JSON parser (optional)
-└── docs/
-    ├── README.md            ← full setup guide
-    └── SAMPLE_LOGS.md       ← real log examples
+```json
+{
+  "timestamp": "2026-03-09T09:00:00Z",
+  "source": "sangfor_ngaf",
+  "log_type": "APT detection",
+  "src_ip": "10.8.2.201",
+  "dst_ip": "8.8.8.8",
+  "attack_type": "Botnet",
+  "threat_level": "Critical",
+  "severity": "Critical",
+  "action": "Denied",
+  "action_normalised": "BLOCK",
+  "event_category": "threat",
+  "url": "pool.hashvault.pro"
+}
 ```
 
 ---
 
-## 🗺️ Integration Roadmap — Community Wanted
+## Cisco XDR Integration
 
-### 🔥 High Priority
-- [ ] Palo Alto PAN-OS → SentinelOne SDL
-- [ ] Fortinet FortiGate → SentinelOne SDL
-- [ ] Cisco ASA / FTD → SentinelOne SDL
-- [ ] Sangfor NGAF → Microsoft Sentinel
-- [ ] Sangfor NGAF → Elastic SIEM
+SecBridge can ship parsed events to Cisco XDR simultaneously alongside SentinelOne SDL.
 
-### 🔶 Medium Priority
-- [ ] Sophos XG Firewall → SentinelOne SDL
-- [ ] WatchGuard Firebox → SentinelOne SDL
-- [ ] Huawei USG Firewall → SentinelOne SDL
-- [ ] Check Point → SentinelOne SDL
-- [ ] Sangfor Endpoint Secure → SentinelOne SDL
+### How it works
 
-### 🔵 Any Firewall → Other SIEM Targets
-- [ ] → Wazuh
-- [ ] → Graylog
-- [ ] → QRadar
-- [ ] → Splunk
+`cisco_xdr_shipper.py` runs as a separate systemd service. It tails the same parsed log files that scalyr-agent ships to SDL, maps them to CTIM Sighting objects, and POSTs them to the Cisco XDR Findings Intake API. Authentication uses OAuth2 — Client ID and Secret are exchanged for a Bearer token that auto-refreshes every hour.
 
-> 💡 Don't see your product? [Open an integration request](../../issues/new?template=integration-request.md)
+### Deploy
+
+```bash
+sudo bash deploy-cisco-xdr.sh
+```
+
+### Configure
+
+Edit `/opt/secbridge/config/cisco_xdr.json`:
+
+```json
+{
+  "client_id":     "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "region":        "us"
+}
+```
+
+Get credentials from: **XDR Console → Administration → API Clients → Add API Client**
+
+Required scope: `private-intel:sighting:write`
+
+Region options: `us` `eu` `apjc`
+
+### Start
+
+```bash
+sudo systemctl start secbridge-cisco-xdr
+journalctl -u secbridge-cisco-xdr -f
+```
+
+### Test
+
+```bash
+# Test CTIM mapping without hitting real API
+python3 /opt/secbridge/cisco_xdr_shipper.py --test
+
+# Test real authentication only
+python3 /opt/secbridge/cisco_xdr_shipper.py --test-auth
+```
 
 ---
 
-## 🤝 Contributing
+## All Services at a Glance
 
-We welcome contributions from anyone who has solved an integration problem and wants to share it.
+| Service | Purpose | Command |
+|---|---|---|
+| `secbridge` | Web UI + API on port 3000 | `systemctl status secbridge` |
+| `scalyr-agent-2` | Ships logs to SentinelOne SDL | `systemctl status scalyr-agent-2` |
+| `sangfor-parser` | Parses Sangfor raw logs to JSON | `systemctl status sangfor-parser` |
+| `secbridge-cisco-xdr` | Ships logs to Cisco XDR | `systemctl status secbridge-cisco-xdr` |
 
-Read the full guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+---
 
-**Quick checklist before your PR:**
-- [ ] `bash -n scripts/install.sh` passes
-- [ ] `python3 -m py_compile parser/<product>_parser.py` passes
-- [ ] `python3 parser/<product>_parser.py --test` passes with real log samples
+## File Paths on the VM
+
+| Path | What it is |
+|---|---|
+| `/opt/secbridge/` | SecBridge install root |
+| `/opt/secbridge/web/` | Web UI backend |
+| `/opt/secbridge/config/sources.json` | All sources config |
+| `/opt/secbridge/config/cisco_xdr.json` | Cisco XDR credentials |
+| `/etc/scalyr-agent-2/agent.json` | Scalyr agent config (auto-generated) |
+| `/var/log/scalyr-agent-2/` | All log files (raw + parsed) |
+| `/var/log/secbridge/` | SecBridge service logs |
+
+---
+
+## Troubleshooting
+
+### Logs not appearing in SDL
+
+```bash
+# Check agent is running
+systemctl status scalyr-agent-2
+
+# Check agent.json has your source
+cat /etc/scalyr-agent-2/agent.json
+
+# Check log file is being written
+tail -f /var/log/scalyr-agent-2/sangfor-ngaf.log
+
+# Re-apply config
+sudo bash manage-sources.sh apply
+```
+
+### Port not listening
+
+```bash
+# Check which ports are open
+ss -ulnp | grep -E '514|5140|5141'
+
+# Re-apply to open ports
+sudo bash manage-sources.sh apply
+```
+
+### Cisco XDR not receiving events
+
+```bash
+# Check shipper logs
+journalctl -u secbridge-cisco-xdr -f
+
+# Verify credentials work
+python3 /opt/secbridge/cisco_xdr_shipper.py --test-auth
+
+# Check parsed log has data
+tail -f /var/log/scalyr-agent-2/sangfor-ngaf-parsed.log
+```
+
+### Web UI login not working
+
+```bash
+# Check service is running
+systemctl status secbridge
+
+# Check logs
+journalctl -u secbridge -n 30
+```
+
+---
+
+## Roadmap
+
+### Coming Soon
+- [ ] Per-source destination routing (FW1 → SDL only, FW2 → XDR only, FW3 → both)
+- [ ] Fortinet FortiGate parser
+- [ ] Palo Alto PAN-OS parser
+- [ ] Cisco ASA parser
+
+### Future Destinations
+- [ ] Microsoft Sentinel
+- [ ] Elastic SIEM
+- [ ] Splunk
+- [ ] Wazuh
+
+---
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
+
+Quick checklist before a PR:
+- [ ] `bash -n install.sh` passes (no syntax errors)
+- [ ] `python3 -m py_compile parser.py` passes
+- [ ] `python3 parser.py --test` passes with real log samples
 - [ ] Tested on Ubuntu 22.04/24.04 or Rocky Linux 9
 - [ ] No hardcoded IPs or credentials
 
 ---
 
-## 💬 Community & Support
+## License
 
-- **Questions / Ideas:** [GitHub Discussions](../../discussions)
-- **Bug Reports:** [GitHub Issues](../../issues)
-- **New Integration Requests:** [Open a request](../../issues/new?template=integration-request.md)
+MIT — free to use, modify, and distribute. See [LICENSE](LICENSE).
 
 ---
 
-## ⚖️ License
-
-MIT License — free to use, modify, and distribute. See [LICENSE](LICENSE).
-
----
-
-*Built by the community, for the community. Vendors don't have to be gatekeepers.*
+*Built by the community. Vendors don't have to be gatekeepers.*
